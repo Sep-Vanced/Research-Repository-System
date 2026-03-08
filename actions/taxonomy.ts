@@ -4,9 +4,16 @@ import { revalidatePath } from 'next/cache';
 import { requireAdmin } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/index';
 import { logAuditEvent } from '@/lib/audit';
+import { enforceRateLimit } from '@/lib/security/rate-limit';
 
 export async function createCategoryAction(name: string, description?: string) {
   const admin = await requireAdmin();
+  enforceRateLimit({
+    namespace: 'action-taxonomy-create-category',
+    key: admin.id,
+    max: 30,
+    windowMs: 10 * 60_000,
+  });
   const supabase = createServiceClient();
 
   if (!name.trim()) throw new Error('Category name is required');
@@ -32,6 +39,12 @@ export async function createCategoryAction(name: string, description?: string) {
 
 export async function deleteCategoryAction(id: string) {
   const admin = await requireAdmin();
+  enforceRateLimit({
+    namespace: 'action-taxonomy-delete-category',
+    key: admin.id,
+    max: 30,
+    windowMs: 10 * 60_000,
+  });
   const supabase = createServiceClient();
   const { error } = await supabase.from('research_categories').delete().eq('id', id);
   if (error) throw new Error('Failed to delete category');
@@ -51,6 +64,12 @@ export async function deleteCategoryAction(id: string) {
 
 export async function addTaxonomyKeywordAction(keyword: string) {
   const admin = await requireAdmin();
+  enforceRateLimit({
+    namespace: 'action-taxonomy-add-keyword',
+    key: admin.id,
+    max: 60,
+    windowMs: 10 * 60_000,
+  });
   const supabase = createServiceClient();
   if (!keyword.trim()) throw new Error('Keyword is required');
 
@@ -74,6 +93,12 @@ export async function addTaxonomyKeywordAction(keyword: string) {
 
 export async function deleteTaxonomyKeywordAction(id: string) {
   const admin = await requireAdmin();
+  enforceRateLimit({
+    namespace: 'action-taxonomy-delete-keyword',
+    key: admin.id,
+    max: 60,
+    windowMs: 10 * 60_000,
+  });
   const supabase = createServiceClient();
   const { error } = await supabase.from('taxonomy_keywords').delete().eq('id', id);
   if (error) throw new Error('Failed to delete keyword');

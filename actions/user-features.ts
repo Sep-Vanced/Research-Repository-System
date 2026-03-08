@@ -4,10 +4,17 @@ import { revalidatePath } from 'next/cache';
 import { getUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/index';
 import { logAuditEvent } from '@/lib/audit';
+import { enforceRateLimit } from '@/lib/security/rate-limit';
 
 export async function toggleBookmark(researchId: string) {
   const user = await getUser();
   if (!user) throw new Error('Unauthorized');
+  enforceRateLimit({
+    namespace: 'action-bookmark-toggle',
+    key: user.id,
+    max: 100,
+    windowMs: 60_000,
+  });
 
   const supabase = createServiceClient();
   const { data: existing } = await supabase
@@ -48,6 +55,12 @@ export async function toggleBookmark(researchId: string) {
 export async function saveSearch(name: string, filters: Record<string, string | number | undefined>) {
   const user = await getUser();
   if (!user) throw new Error('Unauthorized');
+  enforceRateLimit({
+    namespace: 'action-saved-search-create',
+    key: user.id,
+    max: 30,
+    windowMs: 10 * 60_000,
+  });
   if (!name.trim()) throw new Error('Search name is required');
 
   const supabase = createServiceClient();
@@ -73,6 +86,12 @@ export async function saveSearch(name: string, filters: Record<string, string | 
 export async function deleteSavedSearch(id: string) {
   const user = await getUser();
   if (!user) throw new Error('Unauthorized');
+  enforceRateLimit({
+    namespace: 'action-saved-search-delete',
+    key: user.id,
+    max: 60,
+    windowMs: 10 * 60_000,
+  });
 
   const supabase = createServiceClient();
   await supabase.from('saved_searches').delete().eq('id', id).eq('user_id', user.id);
@@ -90,6 +109,12 @@ export async function deleteSavedSearch(id: string) {
 export async function markNotificationRead(id: string) {
   const user = await getUser();
   if (!user) throw new Error('Unauthorized');
+  enforceRateLimit({
+    namespace: 'action-notification-mark-read',
+    key: user.id,
+    max: 180,
+    windowMs: 60_000,
+  });
 
   const supabase = createServiceClient();
   await supabase
@@ -112,6 +137,12 @@ export async function markNotificationRead(id: string) {
 export async function markAllNotificationsRead() {
   const user = await getUser();
   if (!user) throw new Error('Unauthorized');
+  enforceRateLimit({
+    namespace: 'action-notification-mark-all',
+    key: user.id,
+    max: 20,
+    windowMs: 10 * 60_000,
+  });
 
   const supabase = createServiceClient();
   await supabase

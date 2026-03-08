@@ -7,9 +7,39 @@ import { ResearchStatus } from '@/types/research';
 import { createNotification, notifyAllAdmins } from '@/lib/notifications';
 import { createCoauthorInvites } from '@/actions/coauthors';
 import { logAuditEvent } from '@/lib/audit';
+import { enforceRateLimit } from '@/lib/security/rate-limit';
+
+const MAX_RESEARCH_FILE_SIZE = 25 * 1024 * 1024; // 25 MB
+const ALLOWED_RESEARCH_FILE_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+];
+
+function sanitizeFileName(name: string): string {
+  return name
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/_+/g, '_')
+    .slice(0, 120);
+}
+
+function extractStoragePathFromPublicUrl(url: string, bucket: string): string | null {
+  const marker = `/storage/v1/object/public/${bucket}/`;
+  const idx = url.indexOf(marker);
+  if (idx === -1) return null;
+  const pathWithQuery = url.slice(idx + marker.length);
+  return pathWithQuery.split('?')[0] || null;
+}
 
 export async function submitResearch(formData: FormData) {
   const user = await requireResearcher();
+  enforceRateLimit({
+    namespace: 'action-research-submit',
+    key: user.id,
+    max: 10,
+    windowMs: 10 * 60_000,
+  });
   const supabase = createServiceClient();
 
   const title = formData.get('title') as string;
@@ -112,6 +142,12 @@ export async function uploadResearchFile(
   file: File
 ) {
   const user = await requireResearcher();
+  enforceRateLimit({
+    namespace: 'action-research-upload',
+    key: user.id,
+    max: 25,
+    windowMs: 10 * 60_000,
+  });
 
   const supabase = createServiceClient();
 
@@ -129,13 +165,29 @@ export async function uploadResearchFile(
     throw new Error('Unauthorized');
   }
 
+  if (!file || !file.name) {
+    throw new Error('File is required');
+  }
+
+  if (!ALLOWED_RESEARCH_FILE_TYPES.includes(file.type)) {
+    throw new Error('Unsupported file type. Allowed: PDF, DOC, DOCX, TXT.');
+  }
+
+  if (file.size <= 0 || file.size > MAX_RESEARCH_FILE_SIZE) {
+    throw new Error('File size must be between 1 byte and 25 MB.');
+  }
+
   // Upload file to Supabase Storage
   const fileBuffer = await file.arrayBuffer();
-  const filePath = `${researchId}/${Date.now()}_${file.name}`;
+  const safeFileName = sanitizeFileName(file.name);
+  const filePath = `${researchId}/${Date.now()}_${safeFileName}`;
 
   const { error: uploadError } = await supabase.storage
     .from('research-files')
-    .upload(filePath, fileBuffer);
+    .upload(filePath, fileBuffer, {
+      contentType: file.type,
+      upsert: false,
+    });
 
   if (uploadError) {
     console.error('Upload error:', uploadError);
@@ -152,7 +204,7 @@ export async function uploadResearchFile(
     .from('research_files')
     .insert({
       research_id: researchId,
-      file_name: file.name,
+      file_name: safeFileName,
       file_url: urlData.publicUrl,
       file_type: file.type,
       file_size: file.size,
@@ -182,6 +234,12 @@ export async function approveResearch(
   comment?: string
 ) {
   const user = await requireAdmin();
+  enforceRateLimit({
+    namespace: 'action-research-approve',
+    key: user.id,
+    max: 60,
+    windowMs: 10 * 60_000,
+  });
   const supabase = createServiceClient();
 
   // Update research status
@@ -248,6 +306,12 @@ export async function rejectResearch(
   comment: string
 ) {
   const user = await requireAdmin();
+  enforceRateLimit({
+    namespace: 'action-research-reject',
+    key: user.id,
+    max: 60,
+    windowMs: 10 * 60_000,
+  });
   const supabase = createServiceClient();
 
   if (!comment) {
@@ -313,6 +377,12 @@ export async function rejectResearch(
 
 export async function publishResearch(researchId: string) {
   const admin = await requireAdmin();
+  enforceRateLimit({
+    namespace: 'action-research-publish',
+    key: admin.id,
+    max: 60,
+    windowMs: 10 * 60_000,
+  });
   const supabase = createServiceClient();
 
   // Update research status
@@ -396,7 +466,32 @@ export async function publishResearch(researchId: string) {
 
 export async function trackDownload(researchId: string) {
   const user = await getUser();
+  enforceRateLimit({
+    namespace: 'action-research-download',
+    key: user?.id || `anon:${researchId}`,
+    max: 120,
+    windowMs: 60_000,
+  });
   const supabase = createServiceClient();
+
+  const { data: research } = await supabase
+    .from('research_projects')
+    .select('id, status, created_by')
+    .eq('id', researchId)
+    .maybeSingle();
+
+  if (!research) {
+    throw new Error('Research not found');
+  }
+
+  const canDownload =
+    research.status === 'approved' ||
+    research.status === 'published' ||
+    (user && (user.role === 'admin' || user.id === research.created_by));
+
+  if (!canDownload) {
+    throw new Error('Unauthorized');
+  }
 
   // Record download
   const { error: downloadError } = await supabase
@@ -425,6 +520,12 @@ export async function trackDownload(researchId: string) {
 
 export async function deleteResearch(researchId: string) {
   const user = await requireResearcher();
+  enforceRateLimit({
+    namespace: 'action-research-delete',
+    key: user.id,
+    max: 15,
+    windowMs: 10 * 60_000,
+  });
   const supabase = createServiceClient();
 
   // Check ownership or admin
@@ -450,11 +551,11 @@ export async function deleteResearch(researchId: string) {
 
   if (files) {
     for (const file of files) {
-      const filePath = file.file_url.split('/').pop();
+      const filePath = extractStoragePathFromPublicUrl(file.file_url, 'research-files');
       if (filePath) {
         await supabase.storage
           .from('research-files')
-          .remove([`${researchId}/${filePath}`]);
+          .remove([filePath]);
       }
     }
   }
@@ -492,6 +593,12 @@ export async function deleteResearch(researchId: string) {
 
 export async function updateUserRole(userId: string, role: 'admin' | 'researcher' | 'viewer') {
   const admin = await requireAdmin();
+  enforceRateLimit({
+    namespace: 'action-user-role-update',
+    key: admin.id,
+    max: 30,
+    windowMs: 10 * 60_000,
+  });
   const supabase = createServiceClient();
 
   const { error } = await supabase

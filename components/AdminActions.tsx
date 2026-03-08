@@ -13,14 +13,20 @@ export default function AdminActions({ researchId }: AdminActionsProps) {
   const [loading, setLoading] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectComment, setRejectComment] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   const handleApprove = async () => {
     setLoading(true);
+    setError(null);
+    setSuccess(null);
     try {
       await approveResearch(researchId, 'Approved by admin');
+      setSuccess('Research approved successfully.');
       router.refresh();
     } catch (error) {
       console.error('Approve error:', error);
+      setError(error instanceof Error ? error.message : 'Failed to approve research.');
     } finally {
       setLoading(false);
     }
@@ -30,13 +36,17 @@ export default function AdminActions({ researchId }: AdminActionsProps) {
     if (!rejectComment.trim()) return;
     
     setLoading(true);
+    setError(null);
+    setSuccess(null);
     try {
       await rejectResearch(researchId, rejectComment);
       router.refresh();
       setShowRejectModal(false);
       setRejectComment('');
+      setSuccess('Research rejected successfully.');
     } catch (error) {
       console.error('Reject error:', error);
+      setError(error instanceof Error ? error.message : 'Failed to reject research.');
     } finally {
       setLoading(false);
     }
@@ -62,6 +72,8 @@ export default function AdminActions({ researchId }: AdminActionsProps) {
           Reject
         </button>
       </div>
+      {success ? <p className="mt-2 text-sm text-emerald-700">{success}</p> : null}
+      {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
 
       {/* Reject Modal */}
       {showRejectModal && (

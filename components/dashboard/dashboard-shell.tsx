@@ -390,6 +390,7 @@ export default function DashboardShell({
         {mobileNavOpen ? (
           <button
             type="button"
+            suppressHydrationWarning
             className="fixed inset-0 z-40 bg-slate-950/55 backdrop-blur-[2px] lg:hidden"
             onClick={() => setMobileNavOpen(false)}
             aria-label="Close navigation overlay"
@@ -413,6 +414,7 @@ export default function DashboardShell({
               <button
                 type="button"
                 onClick={() => setMobileNavOpen(false)}
+                suppressHydrationWarning
                 className="rounded-lg p-2 text-slate-600 dark:text-slate-300"
                 aria-label="Close menu"
               >
@@ -456,6 +458,7 @@ export default function DashboardShell({
                 <button
                   type="button"
                   onClick={() => setResearchOpen((prev) => !prev)}
+                  suppressHydrationWarning
                   className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${
                     inResearchSection ? 'text-blue-700 dark:text-blue-300' : 'text-slate-600 dark:text-slate-300'
                   }`}
@@ -494,6 +497,7 @@ export default function DashboardShell({
                   <button
                     type="button"
                     onClick={() => setAdminOpen((prev) => !prev)}
+                    suppressHydrationWarning
                     className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${
                       inAdminSection ? 'text-blue-700 dark:text-blue-300' : 'text-slate-600 dark:text-slate-300'
                     }`}
@@ -535,6 +539,7 @@ export default function DashboardShell({
                     setMobileSearchOpen(false);
                     setMobileNavOpen(true);
                   }}
+                  suppressHydrationWarning
                   className="inline-flex rounded-lg bg-white p-2 text-slate-700 transition hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 lg:hidden"
                   aria-label="Open menu"
                 >
@@ -570,6 +575,7 @@ export default function DashboardShell({
                         <button
                           key={item.href}
                           type="button"
+                          suppressHydrationWarning
                           onMouseDown={(event) => event.preventDefault()}
                           onClick={() => navigateToSearchResult(item.href)}
                           className={`flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800 ${
@@ -615,6 +621,7 @@ export default function DashboardShell({
                 <button
                   type="button"
                   onClick={() => setMobileSearchOpen((prev) => !prev)}
+                  suppressHydrationWarning
                   className={`inline-flex h-9 w-9 items-center justify-center rounded-full border transition ${
                     mobileSearchVisible
                       ? 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-500/60 dark:bg-slate-800 dark:text-blue-300'
@@ -667,6 +674,7 @@ export default function DashboardShell({
                       <button
                         key={item.href}
                         type="button"
+                        suppressHydrationWarning
                         onMouseDown={(event) => event.preventDefault()}
                         onClick={() => navigateToSearchResult(item.href)}
                         className={`flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800 ${
